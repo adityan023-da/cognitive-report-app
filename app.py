@@ -1,6 +1,6 @@
 """
 🧠 Student Cognitive Performance Report Generator
-A beautiful, parent-friendly visualization tool for tracking student progress.
+A visualization tool for tracking student progress.
 """
 
 import streamlit as st
@@ -19,20 +19,20 @@ from google.oauth2.service_account import Credentials
 # ============================================================================
 
 COGNITIVE_STACKS = [
-    "Executive Function",
     "Attention & Focus",
     "Pattern Recognition",
-    "Logical Reasoning",
+    "Problem Solving",
+    "Executive Function",
     "Emotional Regulation",
     "Metacognition"
 ]
 
 # Parent-friendly descriptions
 STACK_DESCRIPTIONS = {
-    "Executive Function": "Planning, organizing, and completing tasks",
     "Attention & Focus": "Staying focused during activities",
     "Pattern Recognition": "Spotting patterns and visual thinking",
-    "Logical Reasoning": "Problem-solving and critical thinking",
+    "Problem Solving": "Problem-solving and critical thinking",
+    "Executive Function": "Planning, organizing, and completing tasks",
     "Emotional Regulation": "Managing emotions and staying calm",
     "Metacognition": "Self-awareness and learning from mistakes"
 }
