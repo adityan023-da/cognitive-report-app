@@ -1,6 +1,6 @@
 """
 🧠 Student Cognitive Performance Report Generator
-A visualization tool for tracking student progress.
+A beautiful, parent-friendly visualization tool for tracking student progress.
 """
 
 import streamlit as st
@@ -50,6 +50,7 @@ COLORS = {
 }
 
 DATA_FILE = "student_data.csv"
+DATA_FILE_XLSX = "student_data.xlsx"
 
 # ============================================================================
 # PAGE CONFIGURATION
@@ -110,7 +111,7 @@ SCOPES = [
 ]
 
 def _get_gsheet_connection():
-    """Return (worksheet, True) if Google Sheets is configured, else (None, False)."""
+    """Return (spreadsheet, True) if Google Sheets is configured, else (None, False)."""
     try:
         creds_dict = dict(st.secrets["gcp_service_account"])
         sheet_url = st.secrets["spreadsheet_url"]
@@ -118,49 +119,120 @@ def _get_gsheet_connection():
         client = gspread.authorize(creds)
         spreadsheet = client.open_by_url(sheet_url)
         try:
-            worksheet = spreadsheet.worksheet("student_data")
+            spreadsheet.worksheet("student_data")
         except gspread.WorksheetNotFound:
-            worksheet = spreadsheet.add_worksheet(title="student_data", rows=1000, cols=10)
-            worksheet.append_row(['Student', 'Date'] + COGNITIVE_STACKS)
-        return worksheet, True
+            ws = spreadsheet.add_worksheet(title="student_data", rows=1000, cols=10)
+            ws.append_row(['Student', 'Date'] + COGNITIVE_STACKS)
+        return spreadsheet, True
     except Exception:
         return None, False
 
+COLUMN_RENAMES = {
+    "Logical Reasoning": "Problem Solving",
+}
+
+def _migrate_columns(df):
+    """Rename legacy column names to current ones."""
+    for old_name, new_name in COLUMN_RENAMES.items():
+        if old_name in df.columns and new_name not in df.columns:
+            df = df.rename(columns={old_name: new_name})
+    return df
+
+_SOURCE_COL = "_source_tab"
+
 def load_data():
-    """Load student data from Google Sheets (or local CSV as fallback)."""
-    ws, using_sheets = _get_gsheet_connection()
+    """Load student data from ALL tabs in Google Sheets (or local CSV as fallback).
+
+    Every worksheet in the spreadsheet is read and merged into one DataFrame.
+    Each row is tagged with a hidden ``_source_tab`` column so save_data()
+    knows which rows belong to the app's own tab vs. instructor tabs.
+    Tabs that don't contain the expected columns are silently skipped.
+    """
+    spreadsheet, using_sheets = _get_gsheet_connection()
+    expected_cols = {'Student', 'Date'} | set(COGNITIVE_STACKS)
 
     if using_sheets:
         try:
-            records = ws.get_all_records()
-            if records:
-                df = pd.DataFrame(records)
-                if 'Date' in df.columns:
-                    df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+            all_frames = []
+            for ws in spreadsheet.worksheets():
+                try:
+                    records = ws.get_all_records()
+                    if not records:
+                        continue
+                    tab_df = pd.DataFrame(records)
+                    tab_df = _migrate_columns(tab_df)
+                    if not expected_cols.issubset(set(tab_df.columns)):
+                        missing = expected_cols - set(tab_df.columns)
+                        st.sidebar.caption(
+                            f"⚠️ Tab '{ws.title}' skipped — missing: {missing}"
+                        )
+                        continue
+                    tab_df = tab_df[['Student', 'Date'] + COGNITIVE_STACKS]
+                    tab_df[_SOURCE_COL] = ws.title
+                    all_frames.append(tab_df)
+                except Exception as tab_err:
+                    st.sidebar.caption(f"⚠️ Tab '{ws.title}': {tab_err}")
+                    continue
+
+            if all_frames:
+                df = pd.concat(all_frames, ignore_index=True)
+                df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
                 return df
-            return pd.DataFrame(columns=['Student', 'Date'] + COGNITIVE_STACKS)
+            return pd.DataFrame(columns=['Student', 'Date'] + COGNITIVE_STACKS + [_SOURCE_COL])
         except Exception as e:
             st.error(f"Error loading from Google Sheets: {e}")
-            return pd.DataFrame(columns=['Student', 'Date'] + COGNITIVE_STACKS)
+            return pd.DataFrame(columns=['Student', 'Date'] + COGNITIVE_STACKS + [_SOURCE_COL])
     else:
-        if os.path.exists(DATA_FILE):
+        if os.path.exists(DATA_FILE_XLSX):
+            try:
+                all_frames = []
+                xls = pd.ExcelFile(DATA_FILE_XLSX)
+                for sheet_name in xls.sheet_names:
+                    try:
+                        tab_df = pd.read_excel(xls, sheet_name=sheet_name)
+                        tab_df = _migrate_columns(tab_df)
+                        if not expected_cols.issubset(set(tab_df.columns)):
+                            continue
+                        tab_df = tab_df[['Student', 'Date'] + COGNITIVE_STACKS]
+                        tab_df[_SOURCE_COL] = sheet_name
+                        all_frames.append(tab_df)
+                    except Exception:
+                        continue
+                if all_frames:
+                    df = pd.concat(all_frames, ignore_index=True)
+                    df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+                    return df
+                return pd.DataFrame(columns=['Student', 'Date'] + COGNITIVE_STACKS + [_SOURCE_COL])
+            except Exception as e:
+                st.error(f"Error loading Excel file: {e}")
+                return pd.DataFrame(columns=['Student', 'Date'] + COGNITIVE_STACKS + [_SOURCE_COL])
+        elif os.path.exists(DATA_FILE):
             try:
                 df = pd.read_csv(DATA_FILE)
+                df = _migrate_columns(df)
+                if _SOURCE_COL not in df.columns:
+                    df[_SOURCE_COL] = "student_data"
                 if len(df) > 0 and 'Date' in df.columns:
                     df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
                 return df
             except Exception as e:
                 st.error(f"Error loading data: {e}")
-                return pd.DataFrame(columns=['Student', 'Date'] + COGNITIVE_STACKS)
-        return pd.DataFrame(columns=['Student', 'Date'] + COGNITIVE_STACKS)
+                return pd.DataFrame(columns=['Student', 'Date'] + COGNITIVE_STACKS + [_SOURCE_COL])
+        return pd.DataFrame(columns=['Student', 'Date'] + COGNITIVE_STACKS + [_SOURCE_COL])
 
 def save_data(df):
-    """Save student data to Google Sheets (or local CSV as fallback)."""
-    ws, using_sheets = _get_gsheet_connection()
+    """Save only app-owned rows to the 'student_data' tab (or local CSV).
+
+    Rows that came from instructor tabs are left untouched — only rows
+    tagged as 'student_data' are written back.
+    """
+    spreadsheet, using_sheets = _get_gsheet_connection()
 
     if using_sheets:
         try:
-            save_df = df.copy()
+            ws = spreadsheet.worksheet("student_data")
+            app_df = df[df[_SOURCE_COL] == "student_data"].copy()
+            save_df = app_df.drop(columns=[_SOURCE_COL])
             save_df['Date'] = save_df['Date'].apply(
                 lambda x: x.strftime('%Y-%m-%d') if pd.notna(x) else ''
             )
@@ -171,7 +243,24 @@ def save_data(df):
         except Exception as e:
             st.error(f"Error saving to Google Sheets: {e}")
     else:
-        df.to_csv(DATA_FILE, index=False)
+        app_df = df[df[_SOURCE_COL] == "student_data"].copy()
+        save_df = app_df.drop(columns=[_SOURCE_COL])
+        if os.path.exists(DATA_FILE_XLSX):
+            try:
+                import openpyxl
+                wb = openpyxl.load_workbook(DATA_FILE_XLSX)
+                if "student_data" not in wb.sheetnames:
+                    wb.create_sheet("student_data")
+                ws = wb["student_data"]
+                ws.delete_rows(1, ws.max_row)
+                for r_idx, row in enumerate([save_df.columns.tolist()] + save_df.values.tolist()):
+                    for c_idx, val in enumerate(row):
+                        ws.cell(row=r_idx + 1, column=c_idx + 1, value=val)
+                wb.save(DATA_FILE_XLSX)
+            except Exception as e:
+                st.error(f"Error saving to Excel: {e}")
+        else:
+            save_df.to_csv(DATA_FILE, index=False)
 
 def get_students(df):
     """Get list of unique students"""
@@ -180,28 +269,30 @@ def get_students(df):
     return []
 
 def add_score(df, student, date, scores):
-    """Add or update a score entry"""
-    # Ensure Date column is datetime
+    """Add or update a score entry in the app-owned tab only.
+
+    If the same student+date already exists in the 'student_data' tab it is
+    replaced. Rows from instructor tabs are never touched.
+    """
     if len(df) > 0 and 'Date' in df.columns:
         df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
-        # Remove existing entry for same student/date
         try:
-            mask = (df['Student'] == student) & (df['Date'].dt.date == date)
-            df = df[~mask].copy()
+            dup_mask = (
+                (df['Student'] == student)
+                & (df['Date'].dt.date == date)
+                & (df[_SOURCE_COL] == "student_data")
+            )
+            df = df[~dup_mask].copy()
         except Exception:
-            # If comparison fails, just keep all rows
             df = df.copy()
     else:
         df = df.copy()
-    
-    # Add new entry
-    new_row = {'Student': student, 'Date': pd.Timestamp(date)}
+
+    new_row = {'Student': student, 'Date': pd.Timestamp(date), _SOURCE_COL: "student_data"}
     new_row.update(scores)
     df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-    
-    # Ensure Date column is datetime after concat
     df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
-    
+
     return df.sort_values(['Student', 'Date'])
 
 # ============================================================================
@@ -227,13 +318,123 @@ def get_score_label(score):
     else:
         return "Needs Support 💪"
 
+
+def get_tier(score):
+    """Classify a score into one of four tiers."""
+    if score >= 8:
+        return "excellent"
+    elif score >= 6:
+        return "good"
+    elif score >= 4:
+        return "developing"
+    else:
+        return "needs_support"
+
+
+def _is_high(score):
+    return score >= 6
+
+
+def generate_personalized_message(scores, student_name):
+    """
+    Build a 2-sentence personalized message from layered templates.
+
+    Sentence 1 — Cognitive chain: Attention → Pattern Rec → Problem Solving → Exec Function
+    Sentence 2 — Emotional Regulation + Metacognition
+
+    Scores dict keys must match COGNITIVE_STACKS names.
+    """
+    af = scores["Attention & Focus"]
+    pr = scores["Pattern Recognition"]
+    ps = scores["Problem Solving"]
+    ef = scores["Executive Function"]
+    er = scores["Emotional Regulation"]
+    mc = scores["Metacognition"]
+
+    chain = [af, pr, ps, ef]
+    chain_high = [_is_high(s) for s in chain]
+
+    # --- Sentence 1: cognitive chain ---
+    if all(chain_high):
+        s1 = (
+            f"{student_name} shows strong focus, recognises patterns from previous games, "
+            f"and uses them to solve problems and plan ahead confidently."
+        )
+    elif chain_high[0] and chain_high[1] and chain_high[2] and not chain_high[3]:
+        s1 = (
+            f"{student_name} focuses well, spots patterns, and solves problems independently "
+            f"— the next step is learning to plan further ahead and think through full strategies."
+        )
+    elif chain_high[0] and chain_high[1] and not chain_high[2]:
+        s1 = (
+            f"{student_name} concentrates well and is getting better at recognising ideas from "
+            f"past games — the next exciting step is using those observations to solve positions independently."
+        )
+    elif chain_high[0] and not chain_high[1]:
+        s1 = (
+            f"{student_name} is able to stay focused during sessions, which is a great foundation "
+            f"— the next step is learning to spot familiar patterns and ideas from previous games."
+        )
+    elif not any(chain_high):
+        s1 = (
+            f"{student_name} is building the important foundations right now — staying focused and "
+            f"spotting patterns are the first big steps, and these will unlock problem solving and "
+            f"thinking ahead over time."
+        )
+    else:
+        best_chain_labels = ["staying focused", "spotting patterns",
+                             "solving problems", "planning ahead"]
+        strongest_idx = int(np.argmax(chain))
+        weakest_idx = int(np.argmin(chain))
+        s1 = (
+            f"{student_name} shows promising ability in {best_chain_labels[strongest_idx]}, "
+            f"and building on {best_chain_labels[weakest_idx]} will help bring everything together."
+        )
+
+    # --- Sentence 2: emotional regulation + metacognition ---
+    er_high = _is_high(er)
+    mc_high = _is_high(mc)
+
+    if er_high and mc_high:
+        s2 = (
+            f"{'She' if student_name.endswith('a') or student_name.endswith('i') else 'He'} "
+            f"stays calm under pressure and explains thinking well — keep up the great work!"
+        )
+    elif er_high and not mc_high:
+        s2 = (
+            f"{'She' if student_name.endswith('a') or student_name.endswith('i') else 'He'} "
+            f"handles pressure well at the board, and encouraging "
+            f"{'her' if student_name.endswith('a') or student_name.endswith('i') else 'him'} "
+            f"to talk about why {'she' if student_name.endswith('a') or student_name.endswith('i') else 'he'} "
+            f"made certain moves will help develop even further."
+        )
+    elif not er_high and mc_high:
+        s2 = (
+            f"{'She' if student_name.endswith('a') or student_name.endswith('i') else 'He'} "
+            f"explains reasoning behind moves well, and encouraging "
+            f"{'her' if student_name.endswith('a') or student_name.endswith('i') else 'him'} "
+            f"to stay positive after tough games will help put that thinking to work consistently."
+        )
+    else:
+        s2 = (
+            f"Encouraging {student_name} to stay positive after tough moments and talk through "
+            f"why {'she' if student_name.endswith('a') or student_name.endswith('i') else 'he'} "
+            f"made certain moves will help everything come together."
+        )
+
+    return f"{s1} {s2}"
+
 def create_progress_snapshot(student_data, student_name):
-    """Create a clean bar chart showing skills at a glance"""
+    """Create a bar chart with a personalized message block below it."""
+    import textwrap
 
     student_data = student_data.copy()
     student_data['Date'] = pd.to_datetime(student_data['Date'], errors='coerce')
 
-    fig, ax = plt.subplots(figsize=(12, 7), facecolor='white')
+    fig, (ax_chart, ax_msg) = plt.subplots(
+        2, 1, figsize=(12, 10), facecolor='white',
+        gridspec_kw={'height_ratios': [3, 1], 'hspace': 0.15}
+    )
 
     if len(student_data) > 1:
         display_scores = student_data[COGNITIVE_STACKS].mean().values
@@ -247,15 +448,17 @@ def create_progress_snapshot(student_data, student_name):
     min_date = student_data['Date'].min()
     max_date = student_data['Date'].max()
     fig.suptitle(f"✨ {student_name}'s Learning Journey ✨",
-                 fontsize=22, fontweight='bold', color=COLORS['text'], y=0.98)
+                 fontsize=22, fontweight='bold', color=COLORS['text'], y=0.97)
     if len(student_data) > 1:
         date_range = f"{min_date.strftime('%d %b')} - {max_date.strftime('%d %b %Y')}"
-        fig.text(0.5, 0.91, f"Average Scores • {date_range} ({len(student_data)} sessions)",
+        fig.text(0.5, 0.92, f"Average Scores • {date_range} ({len(student_data)} sessions)",
                  fontsize=11, ha='center', color='gray')
     else:
-        fig.text(0.5, 0.91, f"Session on {max_date.strftime('%d %b %Y')}",
+        fig.text(0.5, 0.92, f"Session on {max_date.strftime('%d %b %Y')}",
                  fontsize=11, ha='center', color='gray')
 
+    # --- Bar chart (top subplot) ---
+    ax = ax_chart
     cmap = LinearSegmentedColormap.from_list(
         'score_gradient', ['#E74C3C', '#E67E22', '#F1C40F', '#2ECC71']
     )
@@ -300,6 +503,7 @@ def create_progress_snapshot(student_data, student_name):
                 ax.text(bar_max + 1.3, i, f'↓{int(abs(improvement))}', va='center',
                         fontsize=10, color='red', fontweight='bold', zorder=4)
 
+    # --- Summary bar ---
     avg_score = np.mean(display_scores)
     total_improvement = np.sum(improvements) if len(student_data) > 1 else 0
 
@@ -308,11 +512,35 @@ def create_progress_snapshot(student_data, student_name):
         summary += f"  |  📈 Total Growth: {'+' if total_improvement >= 0 else ''}{total_improvement:.0f} points"
     summary += f"  |  📅 Sessions: {len(student_data)}"
 
+    # --- Personalized message (bottom subplot) ---
+    score_dict = {stack: float(s) for stack, s in zip(COGNITIVE_STACKS, display_scores)}
+    message = generate_personalized_message(score_dict, student_name)
+
+    ax_msg.set_axis_off()
+    wrapped = textwrap.fill(message, width=95)
+
+    ax_msg.text(
+        0.5, 0.82, "Instructor's Note",
+        transform=ax_msg.transAxes, fontsize=14, fontweight='bold',
+        ha='center', va='top', color=COLORS['primary']
+    )
+    ax_msg.text(
+        0.5, 0.62, wrapped,
+        transform=ax_msg.transAxes, fontsize=11.5, ha='center', va='top',
+        color=COLORS['text'], linespacing=1.5,
+        fontstyle='italic'
+    )
+    ax_msg.add_patch(plt.Rectangle(
+        (0.03, 0.05), 0.94, 0.9, transform=ax_msg.transAxes,
+        facecolor='#F0F7FB', edgecolor=COLORS['primary'],
+        linewidth=1.5, zorder=0, clip_on=False
+    ))
+
     fig.text(0.5, 0.02, summary, fontsize=10, ha='center', color=COLORS['text'],
              bbox=dict(boxstyle='round,pad=0.5', facecolor='#E8F4FD',
                        edgecolor=COLORS['primary'], alpha=0.95))
 
-    plt.tight_layout(rect=[0, 0.06, 1, 0.89])
+    plt.tight_layout(rect=[0, 0.05, 1, 0.90])
 
     return fig
 
@@ -508,9 +736,10 @@ def main():
             student_to_remove = st.selectbox("Select student to remove:", students)
             
             if st.button("🗑️ Remove Student", type="secondary"):
-                st.session_state.data = df[df['Student'] != student_to_remove]
+                app_mask = (df['Student'] == student_to_remove) & (df[_SOURCE_COL] == "student_data")
+                st.session_state.data = df[~app_mask]
                 save_data(st.session_state.data)
-                st.success(f"Removed {student_to_remove}")
+                st.success(f"Removed {student_to_remove} from app data")
                 st.rerun()
     
     # ==================== PAGE: VIEW ALL DATA ====================
@@ -528,6 +757,8 @@ def main():
             else:
                 display_df = df[df['Student'] == filter_student].copy()
             
+            display_df = display_df.drop(columns=[_SOURCE_COL], errors='ignore')
+
             # Format display - ensure Date is datetime first
             display_df['Date'] = pd.to_datetime(display_df['Date'], errors='coerce')
             display_df['Date'] = display_df['Date'].apply(
