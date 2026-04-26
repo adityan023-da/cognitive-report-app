@@ -11,6 +11,7 @@ from matplotlib.colors import LinearSegmentedColormap
 from datetime import datetime, timedelta
 import os
 import io
+import zipfile
 import gspread
 from google.oauth2.service_account import Credentials
 
@@ -564,7 +565,8 @@ def main():
     # Sidebar navigation
     st.sidebar.title("📋 Menu")
     page = st.sidebar.radio("Navigate to:", 
-                           ["📝 Enter Scores", "📊 Generate Report", "👥 Manage Students", "📁 View All Data"])
+                           ["📝 Enter Scores", "📊 Generate Report", "📦 Bulk Download",
+                            "👥 Manage Students", "📁 View All Data"])
     
     st.sidebar.markdown("---")
     st.sidebar.markdown("### 📈 Quick Stats")
@@ -713,6 +715,146 @@ def main():
                         
                         plt.close(fig)
     
+    # ==================== PAGE: BULK DOWNLOAD ====================
+    elif page == "📦 Bulk Download":
+        st.header("📦 Bulk Download Reports")
+
+        if not students:
+            st.warning("No student data yet. Please enter some scores first!")
+            return
+
+        col1, col2 = st.columns([1, 2])
+
+        with col1:
+            st.subheader("Select Students")
+            select_mode = st.radio(
+                "Which students?",
+                ["All students", "Select specific students"],
+                key="bulk_select_mode"
+            )
+
+            if select_mode == "All students":
+                selected_students = students
+            else:
+                selected_students = st.multiselect(
+                    "Choose students:", students, default=students
+                )
+
+            st.markdown("---")
+            st.markdown("**📅 Date Range:**")
+
+            bulk_date_option = st.radio("", [
+                "Last 30 days",
+                "Last 7 days",
+                "All time",
+                "Custom range"
+            ], key="bulk_date_option")
+
+            if bulk_date_option == "Custom range":
+                df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+                all_dates = df.dropna(subset=['Date'])
+                if len(all_dates) > 0:
+                    global_min = all_dates['Date'].min().date()
+                    global_max = all_dates['Date'].max().date()
+                else:
+                    global_min = datetime.today().date()
+                    global_max = datetime.today().date()
+                bulk_from = st.date_input("From:", value=global_min, key="bulk_from")
+                bulk_to = st.date_input("To:", value=global_max, key="bulk_to")
+
+            st.markdown("---")
+            bulk_btn = st.button(
+                f"📦 Generate {len(selected_students)} Report(s)",
+                type="primary", use_container_width=True
+            )
+
+        with col2:
+            if bulk_btn and selected_students:
+                zip_buf = io.BytesIO()
+                generated = 0
+                skipped = []
+
+                progress = st.progress(0, text="Generating reports...")
+
+                with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+                    for i, student in enumerate(selected_students):
+                        progress.progress(
+                            (i + 1) / len(selected_students),
+                            text=f"Generating report for {student}..."
+                        )
+
+                        student_df = df[df['Student'] == student].copy()
+                        student_df['Date'] = pd.to_datetime(
+                            student_df['Date'], errors='coerce'
+                        )
+                        student_df = student_df.dropna(subset=['Date'])
+
+                        if len(student_df) == 0:
+                            skipped.append(student)
+                            continue
+
+                        s_min = student_df['Date'].min().date()
+                        s_max = student_df['Date'].max().date()
+
+                        if bulk_date_option == "Last 30 days":
+                            d_from = max(s_min, s_max - timedelta(days=30))
+                            d_to = s_max
+                        elif bulk_date_option == "Last 7 days":
+                            d_from = max(s_min, s_max - timedelta(days=7))
+                            d_to = s_max
+                        elif bulk_date_option == "Custom range":
+                            d_from = bulk_from
+                            d_to = bulk_to
+                        else:
+                            d_from = s_min
+                            d_to = s_max
+
+                        mask = (
+                            (student_df['Date'].dt.date >= d_from)
+                            & (student_df['Date'].dt.date <= d_to)
+                        )
+                        filtered = student_df[mask].sort_values('Date')
+
+                        if len(filtered) == 0:
+                            skipped.append(student)
+                            continue
+
+                        fig = create_progress_snapshot(filtered, student)
+                        img_buf = io.BytesIO()
+                        fig.savefig(
+                            img_buf, format='png', dpi=150,
+                            bbox_inches='tight', facecolor='white',
+                            edgecolor='none'
+                        )
+                        plt.close(fig)
+                        img_buf.seek(0)
+
+                        safe_name = student.replace(' ', '_')
+                        zf.writestr(f"Report_{safe_name}.png", img_buf.read())
+                        generated += 1
+
+                progress.empty()
+
+                if generated > 0:
+                    zip_buf.seek(0)
+                    st.success(f"✅ {generated} report(s) generated!")
+
+                    if skipped:
+                        st.info(
+                            f"Skipped {len(skipped)} student(s) with no data "
+                            f"in the selected range: {', '.join(skipped)}"
+                        )
+
+                    st.download_button(
+                        label=f"⬇️ Download All Reports (ZIP — {generated} files)",
+                        data=zip_buf,
+                        file_name=f"Reports_{datetime.now().strftime('%Y%m%d')}.zip",
+                        mime="application/zip",
+                        use_container_width=True
+                    )
+                else:
+                    st.error("No reports could be generated — no valid data in the selected range.")
+
     # ==================== PAGE: MANAGE STUDENTS ====================
     elif page == "👥 Manage Students":
         st.header("👥 Manage Students")
