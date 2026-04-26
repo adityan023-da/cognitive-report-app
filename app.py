@@ -699,17 +699,17 @@ def main():
                         
                         # Download button
                         buf = io.BytesIO()
-                        fig.savefig(buf, format='png', dpi=150, bbox_inches='tight', 
+                        fig.savefig(buf, format='jpeg', dpi=150, bbox_inches='tight', 
                                    facecolor='white', edgecolor='none')
                         buf.seek(0)
                         
-                        filename = f"Report_{selected_student.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.png"
+                        filename = f"Report_{selected_student.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.jpg"
                         
                         st.download_button(
-                            label="⬇️ Download Report (PNG)",
+                            label="⬇️ Download Report (JPEG)",
                             data=buf,
                             file_name=filename,
-                            mime="image/png",
+                            mime="image/jpeg",
                             use_container_width=True
                         )
                         
@@ -822,7 +822,7 @@ def main():
                         fig = create_progress_snapshot(filtered, student)
                         img_buf = io.BytesIO()
                         fig.savefig(
-                            img_buf, format='png', dpi=150,
+                            img_buf, format='jpeg', dpi=150,
                             bbox_inches='tight', facecolor='white',
                             edgecolor='none'
                         )
@@ -830,7 +830,7 @@ def main():
                         img_buf.seek(0)
 
                         safe_name = student.replace(' ', '_')
-                        zf.writestr(f"Report_{safe_name}.png", img_buf.read())
+                        zf.writestr(f"Report_{safe_name}.jpg", img_buf.read())
                         generated += 1
 
                 progress.empty()
