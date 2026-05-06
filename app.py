@@ -1,6 +1,6 @@
 """
 🧠 Student Cognitive Performance Report Generator
-A beautiful, parent-friendly visualization tool for tracking student progress.
+A visualization tool for tracking student progress.
 """
 
 import streamlit as st
@@ -727,17 +727,37 @@ def main():
 
         with col1:
             st.subheader("Select Students")
+
+            available_tabs = sorted(
+                df[_SOURCE_COL].dropna().unique().tolist()
+            ) if _SOURCE_COL in df.columns else []
+
+            tab_options = ["All sheets"] + available_tabs
+            selected_tab = st.selectbox(
+                "📄 Filter by sheet/instructor:", tab_options,
+                key="bulk_tab_filter"
+            )
+
+            if selected_tab == "All sheets":
+                tab_df = df
+            else:
+                tab_df = df[df[_SOURCE_COL] == selected_tab]
+
+            tab_students = sorted(
+                tab_df['Student'].dropna().unique().tolist()
+            ) if len(tab_df) > 0 else []
+
             select_mode = st.radio(
                 "Which students?",
-                ["All students", "Select specific students"],
+                ["All students in this sheet", "Select specific students"],
                 key="bulk_select_mode"
             )
 
-            if select_mode == "All students":
-                selected_students = students
+            if select_mode == "All students in this sheet":
+                selected_students = tab_students
             else:
                 selected_students = st.multiselect(
-                    "Choose students:", students, default=students
+                    "Choose students:", tab_students, default=tab_students
                 )
 
             st.markdown("---")
@@ -783,7 +803,13 @@ def main():
                             text=f"Generating report for {student}..."
                         )
 
-                        student_df = df[df['Student'] == student].copy()
+                        if selected_tab == "All sheets":
+                            student_df = df[df['Student'] == student].copy()
+                        else:
+                            student_df = df[
+                                (df['Student'] == student)
+                                & (df[_SOURCE_COL] == selected_tab)
+                            ].copy()
                         student_df['Date'] = pd.to_datetime(
                             student_df['Date'], errors='coerce'
                         )
