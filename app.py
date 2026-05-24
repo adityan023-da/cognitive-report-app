@@ -1,6 +1,6 @@
 """
 🧠 Student Cognitive Performance Report Generator
-A visualization tool for tracking student progress.
+A parent-friendly visualization tool for tracking student progress.
 """
 
 import streamlit as st
@@ -178,6 +178,8 @@ def load_data():
             if all_frames:
                 df = pd.concat(all_frames, ignore_index=True)
                 df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+                for col in COGNITIVE_STACKS:
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
                 return df
             return pd.DataFrame(columns=['Student', 'Date'] + COGNITIVE_STACKS + [_SOURCE_COL])
         except Exception as e:
@@ -202,6 +204,8 @@ def load_data():
                 if all_frames:
                     df = pd.concat(all_frames, ignore_index=True)
                     df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+                    for col in COGNITIVE_STACKS:
+                        df[col] = pd.to_numeric(df[col], errors='coerce')
                     return df
                 return pd.DataFrame(columns=['Student', 'Date'] + COGNITIVE_STACKS + [_SOURCE_COL])
             except Exception as e:
@@ -215,6 +219,9 @@ def load_data():
                     df[_SOURCE_COL] = "student_data"
                 if len(df) > 0 and 'Date' in df.columns:
                     df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+                for col in COGNITIVE_STACKS:
+                    if col in df.columns:
+                        df[col] = pd.to_numeric(df[col], errors='coerce')
                 return df
             except Exception as e:
                 st.error(f"Error loading data: {e}")
