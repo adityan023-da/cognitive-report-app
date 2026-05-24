@@ -440,8 +440,8 @@ def create_progress_snapshot(student_data, student_name):
     student_data['Date'] = pd.to_datetime(student_data['Date'], errors='coerce')
 
     fig, (ax_chart, ax_msg) = plt.subplots(
-        2, 1, figsize=(12, 10), facecolor='white',
-        gridspec_kw={'height_ratios': [3, 1], 'hspace': 0.15}
+        2, 1, figsize=(12, 11), facecolor='white',
+        gridspec_kw={'height_ratios': [3, 1], 'hspace': 0.25}
     )
 
     if len(student_data) > 1:
@@ -455,14 +455,14 @@ def create_progress_snapshot(student_data, student_name):
 
     min_date = student_data['Date'].min()
     max_date = student_data['Date'].max()
-    fig.suptitle(f"✨ {student_name}'s Learning Journey ✨",
-                 fontsize=22, fontweight='bold', color=COLORS['text'], y=0.97)
+    fig.suptitle(f"{student_name}'s Learning Journey",
+                 fontsize=22, fontweight='bold', color=COLORS['text'], y=0.98)
     if len(student_data) > 1:
         date_range = f"{min_date.strftime('%d %b')} - {max_date.strftime('%d %b %Y')}"
-        fig.text(0.5, 0.92, f"Average Scores • {date_range} ({len(student_data)} sessions)",
+        fig.text(0.5, 0.935, f"Average Scores  |  {date_range}  |  {len(student_data)} sessions",
                  fontsize=11, ha='center', color='gray')
     else:
-        fig.text(0.5, 0.92, f"Session on {max_date.strftime('%d %b %Y')}",
+        fig.text(0.5, 0.935, f"Session on {max_date.strftime('%d %b %Y')}",
                  fontsize=11, ha='center', color='gray')
 
     # --- Bar chart (top subplot) ---
@@ -481,7 +481,7 @@ def create_progress_snapshot(student_data, student_name):
     ax.set_autoscale_on(False)
     ax.set_facecolor('#FAFAFA')
     chart_title = "Average Scores at a Glance" if len(student_data) > 1 else "Skills at a Glance"
-    ax.set_title(chart_title, fontsize=16, fontweight='bold', pad=15)
+    ax.set_title(chart_title, fontsize=14, fontweight='bold', pad=25)
     ax.set_xlabel('Score', fontsize=11)
     ax.set_xticks(range(0, 11, 2))
     ax.set_yticks(y_pos)
@@ -548,7 +548,7 @@ def create_progress_snapshot(student_data, student_name):
              bbox=dict(boxstyle='round,pad=0.5', facecolor='#E8F4FD',
                        edgecolor=COLORS['primary'], alpha=0.95))
 
-    plt.tight_layout(rect=[0, 0.05, 1, 0.90])
+    plt.tight_layout(rect=[0, 0.05, 1, 0.88])
 
     return fig
 
