@@ -432,15 +432,18 @@ def generate_personalized_message(scores, student_name):
 
     return f"{s1} {s2}"
 
+LOGO_FILE = "logo.png"
+
 def create_progress_snapshot(student_data, student_name):
     """Create a bar chart with a personalized message block below it."""
     import textwrap
+    from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 
     student_data = student_data.copy()
     student_data['Date'] = pd.to_datetime(student_data['Date'], errors='coerce')
 
     fig, (ax_chart, ax_msg) = plt.subplots(
-        2, 1, figsize=(12, 11), facecolor='white',
+        2, 1, figsize=(12, 11.5), facecolor='white',
         gridspec_kw={'height_ratios': [3, 1], 'hspace': 0.25}
     )
 
@@ -453,16 +456,30 @@ def create_progress_snapshot(student_data, student_name):
         display_scores = student_data[COGNITIVE_STACKS].iloc[-1].values
         improvements = np.zeros(len(COGNITIVE_STACKS))
 
+    # --- Logo at the top ---
+    logo_path = os.path.join(os.path.dirname(__file__), LOGO_FILE)
+    if os.path.exists(logo_path):
+        from PIL import Image
+        logo_img = Image.open(logo_path)
+        logo_ax = fig.add_axes([0.38, 0.92, 0.24, 0.08], anchor='C')
+        logo_ax.imshow(logo_img)
+        logo_ax.axis('off')
+        title_y = 0.91
+        subtitle_y = 0.875
+    else:
+        title_y = 0.98
+        subtitle_y = 0.935
+
     min_date = student_data['Date'].min()
     max_date = student_data['Date'].max()
     fig.suptitle(f"{student_name}'s Learning Journey",
-                 fontsize=22, fontweight='bold', color=COLORS['text'], y=0.98)
+                 fontsize=22, fontweight='bold', color=COLORS['text'], y=title_y)
     if len(student_data) > 1:
         date_range = f"{min_date.strftime('%d %b')} - {max_date.strftime('%d %b %Y')}"
-        fig.text(0.5, 0.935, f"Average Scores  |  {date_range}  |  {len(student_data)} sessions",
+        fig.text(0.5, subtitle_y, f"Average Scores  |  {date_range}  |  {len(student_data)} sessions",
                  fontsize=11, ha='center', color='gray')
     else:
-        fig.text(0.5, 0.935, f"Session on {max_date.strftime('%d %b %Y')}",
+        fig.text(0.5, subtitle_y, f"Session on {max_date.strftime('%d %b %Y')}",
                  fontsize=11, ha='center', color='gray')
 
     # --- Bar chart (top subplot) ---
