@@ -442,9 +442,13 @@ def create_progress_snapshot(student_data, student_name):
     student_data = student_data.copy()
     student_data['Date'] = pd.to_datetime(student_data['Date'], errors='coerce')
 
+    # --- Logo detection ---
+    logo_path = os.path.join(os.path.dirname(__file__), LOGO_FILE)
+    has_logo = os.path.exists(logo_path)
+
     fig, (ax_chart, ax_msg) = plt.subplots(
-        2, 1, figsize=(12, 11.5), facecolor='white',
-        gridspec_kw={'height_ratios': [3, 1], 'hspace': 0.25}
+        2, 1, figsize=(12, 13 if has_logo else 11), facecolor='white',
+        gridspec_kw={'height_ratios': [3, 1], 'hspace': 0.2}
     )
 
     if len(student_data) > 1:
@@ -457,15 +461,14 @@ def create_progress_snapshot(student_data, student_name):
         improvements = np.zeros(len(COGNITIVE_STACKS))
 
     # --- Logo at the top ---
-    logo_path = os.path.join(os.path.dirname(__file__), LOGO_FILE)
-    if os.path.exists(logo_path):
+    if has_logo:
         from PIL import Image
         logo_img = Image.open(logo_path)
-        logo_ax = fig.add_axes([0.38, 0.92, 0.24, 0.08], anchor='C')
-        logo_ax.imshow(logo_img)
+        logo_ax = fig.add_axes([0.30, 0.90, 0.40, 0.09])
+        logo_ax.imshow(logo_img, aspect='equal')
         logo_ax.axis('off')
-        title_y = 0.91
-        subtitle_y = 0.875
+        title_y = 0.88
+        subtitle_y = 0.855
     else:
         title_y = 0.98
         subtitle_y = 0.935
@@ -498,7 +501,7 @@ def create_progress_snapshot(student_data, student_name):
     ax.set_autoscale_on(False)
     ax.set_facecolor('#FAFAFA')
     chart_title = "Average Scores at a Glance" if len(student_data) > 1 else "Skills at a Glance"
-    ax.set_title(chart_title, fontsize=14, fontweight='bold', pad=25)
+    ax.set_title(chart_title, fontsize=14, fontweight='bold', pad=15)
     ax.set_xlabel('Score', fontsize=11)
     ax.set_xticks(range(0, 11, 2))
     ax.set_yticks(y_pos)
@@ -565,7 +568,8 @@ def create_progress_snapshot(student_data, student_name):
              bbox=dict(boxstyle='round,pad=0.5', facecolor='#E8F4FD',
                        edgecolor=COLORS['primary'], alpha=0.95))
 
-    plt.tight_layout(rect=[0, 0.05, 1, 0.88])
+    top_margin = 0.83 if has_logo else 0.88
+    plt.tight_layout(rect=[0, 0.05, 1, top_margin])
 
     return fig
 
