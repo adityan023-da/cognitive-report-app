@@ -447,7 +447,7 @@ def create_progress_snapshot(student_data, student_name):
     has_logo = os.path.exists(logo_path)
 
     fig, (ax_chart, ax_msg) = plt.subplots(
-        2, 1, figsize=(12, 13 if has_logo else 11), facecolor='white',
+        2, 1, figsize=(12, 15 if has_logo else 11), facecolor='white',
         gridspec_kw={'height_ratios': [3, 1], 'hspace': 0.2}
     )
 
@@ -464,11 +464,11 @@ def create_progress_snapshot(student_data, student_name):
     if has_logo:
         from PIL import Image
         logo_img = Image.open(logo_path)
-        logo_ax = fig.add_axes([0.30, 0.92, 0.40, 0.07])
+        logo_ax = fig.add_axes([0.30, 0.93, 0.40, 0.06])
         logo_ax.imshow(logo_img, aspect='equal')
         logo_ax.axis('off')
-        title_y = 0.90
-        subtitle_y = 0.875
+        title_y = 0.91
+        subtitle_y = 0.885
     else:
         title_y = 0.98
         subtitle_y = 0.935
@@ -567,8 +567,8 @@ def create_progress_snapshot(student_data, student_name):
              bbox=dict(boxstyle='round,pad=0.5', facecolor='#E8F4FD',
                        edgecolor=COLORS['primary'], alpha=0.95))
 
-    top_margin = 0.72 if has_logo else 0.88
-    plt.tight_layout(rect=[0, 0.05, 1, top_margin])
+    top_margin = 0.68 if has_logo else 0.88
+    plt.tight_layout(rect=[0, 0.04, 1, top_margin])
 
     return fig
 
