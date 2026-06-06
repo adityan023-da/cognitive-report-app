@@ -468,10 +468,10 @@ def create_progress_snapshot(student_data, student_name):
         logo_ax.imshow(logo_img, aspect='equal')
         logo_ax.axis('off')
         title_y = 0.91
-        subtitle_y = 0.885
+        subtitle_y = 0.87
     else:
         title_y = 0.98
-        subtitle_y = 0.935
+        subtitle_y = 0.92
 
     min_date = student_data['Date'].min()
     max_date = student_data['Date'].max()
@@ -531,13 +531,16 @@ def create_progress_snapshot(student_data, student_name):
                         fontsize=10, color='red', fontweight='bold', zorder=4)
 
     # --- Summary bar ---
-    avg_score = np.mean(display_scores)
-    total_improvement = np.sum(improvements) if len(student_data) > 1 else 0
+    avg_score = np.nanmean(display_scores)
+    total_improvement = np.nansum(improvements) if len(student_data) > 1 else 0
 
-    summary = f"📊 Overall Score: {avg_score:.1f}/10"
+    summary = f"Overall Score: {avg_score:.1f}/10"
     if len(student_data) > 1:
-        summary += f"  |  📈 Total Growth: {'+' if total_improvement >= 0 else ''}{total_improvement:.0f} points"
-    summary += f"  |  📅 Sessions: {len(student_data)}"
+        if np.isnan(total_improvement) or total_improvement == 0:
+            summary += "  |  Growth: No change"
+        else:
+            summary += f"  |  Growth: {'+' if total_improvement > 0 else ''}{total_improvement:.0f} points"
+    summary += f"  |  Sessions: {len(student_data)}"
 
     # --- Personalized message (bottom subplot) ---
     score_dict = {stack: float(s) for stack, s in zip(COGNITIVE_STACKS, display_scores)}
