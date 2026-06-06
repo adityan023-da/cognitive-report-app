@@ -468,7 +468,7 @@ def create_progress_snapshot(student_data, student_name):
         logo_ax.imshow(logo_img, aspect='equal')
         logo_ax.axis('off')
         title_y = 0.91
-        subtitle_y = 0.875
+        subtitle_y = 0.880
     else:
         title_y = 0.98
         subtitle_y = 0.92
