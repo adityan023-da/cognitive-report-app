@@ -468,7 +468,7 @@ def create_progress_snapshot(student_data, student_name):
         logo_ax.imshow(logo_img, aspect='equal')
         logo_ax.axis('off')
         title_y = 0.91
-        subtitle_y = 0.880
+        subtitle_y = 0.882
     else:
         title_y = 0.98
         subtitle_y = 0.92
@@ -570,7 +570,7 @@ def create_progress_snapshot(student_data, student_name):
              bbox=dict(boxstyle='round,pad=0.5', facecolor='#E8F4FD',
                        edgecolor=COLORS['primary'], alpha=0.95))
 
-    top_margin = 0.63 if has_logo else 0.88
+    top_margin = 0.60 if has_logo else 0.88
     plt.tight_layout(rect=[0, 0.04, 1, top_margin])
 
     return fig
